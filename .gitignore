@@ -1,0 +1,12 @@
+*.pyc
+*.pytest_cache
+*.egg-info
+.vscode
+build
+dist
+.tox
+.coverage
+tmp
+.eggs
+*.xml
+*.svg
