@@ -83,4 +83,4 @@ def get_connection_types(itfs, dst, src, bidir, dominant_type=None):
         # A dominant type will override any other types for the given connection
         return (dominant_type,)
 
-    return tuple(driving_types & receiving_types)
+    return tuple(sorted(driving_types & receiving_types))
