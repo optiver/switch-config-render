@@ -248,6 +248,14 @@ class FPGAPorts(InterfaceCollection):
 
 def generate_system_svg(
     filename,
+    *args,
+    **kwargs
+):
+    with open(filename, 'w') as fileobj:
+        generate_system_svg_stream(fileobj, *args, **kwargs)
+
+def generate_system_svg_stream(
+    stream,
     interfaces,
     connections,
     fpga_devices,
@@ -291,7 +299,6 @@ def generate_system_svg(
         drawing_height = fpgas_y + fpgas_height + _COLLECTION_SPACING / 2
 
     drawing = svgwrite.Drawing(
-        filename=filename,
         debug=True,
         size=(
             "{}mm".format(str(drawing_width / 10)),
@@ -366,4 +373,4 @@ def generate_system_svg(
         )
 
     canvas.render_legend(boxes_width, _COLLECTION_SPACING, _LEGEND_WIDTH)
-    canvas.drawing.save()
+    canvas.drawing.write(stream)
