@@ -18,7 +18,7 @@ Example output:
 
 ![](example_output.png)
 
-Install by running `python setup.py install` from the project root
+Install by running `pip install switch-config-render`.
 directory.
 
 ## Generating an SVG
