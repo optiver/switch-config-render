@@ -1,4 +1,3 @@
-
 import copy
 import svgwrite
 
@@ -28,6 +27,7 @@ class InterfaceCollection(object):
         self.x = None
         self.y = None
         self.itf_idx = 0
+        self.itf_params = {}
 
     def render_box(self, canvas, x, y):
         box = canvas.drawing.add(canvas.drawing.g(id="box_" + self.id, fill="white"))
@@ -91,9 +91,10 @@ class InterfaceCollection(object):
         lower_mid = (middle_x, y + _INTERFACE_V_CLEARANCE + _INTERFACE_HEIGHT)
         upper_mid = (middle_x, y + _INTERFACE_V_CLEARANCE)
 
-        canvas.add_interface_connection_points(
-            itf, self.front_panel, lower_mid, upper_mid
+        canvas.add_connection_endpoint(
+            itf, "et_itf" if self.front_panel else "ap_itf", lower_mid, upper_mid
         )
+        self.itf_params[itf] = params
 
         # Make the front panel interface ports look like RJ-45 connectors
         if self.front_panel:
@@ -198,9 +199,7 @@ class FPGAPorts(InterfaceCollection):
         height = max([y for _, y in points]) * size_factor
 
         # Determine the placement of the device by selecting the mid-point of all the connected ports
-        itf_coords = [
-            canvas.app_itf_coords[itf] for itf in ports if itf in canvas.app_itf_coords
-        ]
+        itf_coords = [canvas.ap_coords[itf] for itf in ports if itf in canvas.ap_coords]
         itf_x_coords = [x for x, _ in itf_coords]
 
         x_offset = min(itf_x_coords) + (max(itf_x_coords) - min(itf_x_coords)) / 2.0
@@ -234,33 +233,46 @@ class FPGAPorts(InterfaceCollection):
             )
         )
 
-        device_conn_coords = (x_middle, (self.y + FPGAPorts.DEVICE_Y_OFFSET))
+        device_upper_coords = (x_middle, (self.y + FPGAPorts.DEVICE_Y_OFFSET))
+        device_lower_coords = (x_middle, (self.y + FPGAPorts.DEVICE_Y_OFFSET) + height)
+
+        canvas.add_connection_endpoint(
+            name, "app", device_lower_coords, device_upper_coords
+        )
+
+    def draw_device_connections(self, canvas, name, ports):
         for port in ports:
-            device.add(
-                canvas.drawing.line(
-                    device_conn_coords,
-                    canvas.app_itf_coords[port],
-                    stroke_width=4,
-                    stroke="black",
-                )
-            )
+            receives = False
+            drives = False
+            dst = port
+            src = name
+
+            if (
+                "receives" in self.itf_params[port]
+                and self.itf_params[port]["receives"]
+            ):
+                receives = True
+
+            if "drives" in self.itf_params[port] and self.itf_params[port]["drives"]:
+                drives = True
+                if receives:
+                    bidir = True
+                else:
+                    dst = name
+                    src = port
+
+            bidir = receives and drives
+            nodir = not receives and not drives
+            canvas.render_connection(dst, src, bidir=bidir, onchip=True, nodir=nodir)
 
 
-def generate_system_svg(
-    filename,
-    *args,
-    **kwargs
-):
-    with open(filename, 'w') as fileobj:
+def generate_system_svg(filename, *args, **kwargs):
+    with open(filename, "w") as fileobj:
         generate_system_svg_stream(fileobj, *args, **kwargs)
 
+
 def generate_system_svg_stream(
-    stream,
-    interfaces,
-    connections,
-    fpga_devices,
-    device_shapes,
-    dominant_type=None,
+    stream, interfaces, connections, fpga_devices, device_shapes, dominant_type=None
 ):
     fpp = FrontPanelPorts(len(get_sorted_itfs(interfaces, "et")))
 
@@ -357,6 +369,7 @@ def generate_system_svg_stream(
             endp1,
             endp2,
             bidir=True,
+            onchip=False,
             types=get_connection_types(
                 interfaces, endp1, endp2, bidir=True, dominant_type=dominant_type
             ),
@@ -367,10 +380,15 @@ def generate_system_svg_stream(
             dst,
             src,
             bidir=False,
+            onchip=False,
             types=get_connection_types(
                 interfaces, dst, src, bidir=False, dominant_type=dominant_type
             ),
         )
+
+    for fpga_id in fpga_ids:
+        for device, params in fpga_devices[fpga_id].items():
+            fpgas[fpga_id].draw_device_connections(canvas, device, params["ports"])
 
     canvas.render_legend(boxes_width, _COLLECTION_SPACING, _LEGEND_WIDTH)
     canvas.drawing.write(stream)

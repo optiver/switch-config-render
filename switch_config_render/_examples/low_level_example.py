@@ -1,4 +1,3 @@
-
 import svgwrite
 from switch_config_render.generate_svg import FrontPanelPorts, FPGAPorts, Canvas
 
@@ -92,9 +91,14 @@ def render_low_level_example():
         canvas, "mux_0", get_mux_points(), 80, ["ap4", "ap5", "ap6", "ap7"]
     )
 
+    fpgas["central_fpga"].draw_app_connections(canvas, "dev_0", ["ap1", "ap2", "ap3"])
+    fpgas["central_fpga"].draw_app_connections(canvas, "mux_0", ["ap4", "ap5", "ap6", "ap7"])
+
     # Render the connections
-    canvas.render_connection("et1", "ap1", bidir=False, types=("abc",))
-    canvas.render_connection("ap8", "ap1", bidir=True, types=("abc", "def"))
+    canvas.render_connection("et1", "ap1", bidir=False, onchip=False, types=("abc",))
+    canvas.render_connection(
+        "ap8", "ap1", bidir=True, onchip=False, types=("abc", "def")
+    )
 
     # Render the legend
     canvas.render_legend(boxes_width, COLLECTION_SPACING, LEGEND_WIDTH)
