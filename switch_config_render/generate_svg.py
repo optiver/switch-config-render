@@ -183,22 +183,22 @@ class FrontPanelPorts(InterfaceCollection):
 
 
 class FPGAPorts(InterfaceCollection):
-    DEVICE_Y_OFFSET = 400
+    APP_Y_OFFSET = 400
 
     def __init__(self, id, interface_count):
         super(FPGAPorts, self).__init__(id, interface_count, False, 750)
 
-    def draw_device(self, canvas, name, points, size_factor, ports):
-        device = canvas.drawing.add(
+    def draw_app(self, canvas, name, points, size_factor, ports):
+        app = canvas.drawing.add(
             canvas.drawing.g(
-                id="device_" + self.id + "_" + name, fill="white", font_size=50
+                id="app_" + self.id + "_" + name, fill="white", font_size=50
             )
         )
 
         width = max([x for x, _ in points]) * size_factor
         height = max([y for _, y in points]) * size_factor
 
-        # Determine the placement of the device by selecting the mid-point of all the connected ports
+        # Determine the placement of the app by selecting the mid-point of all the connected ports
         itf_coords = [canvas.ap_coords[itf] for itf in ports if itf in canvas.ap_coords]
         itf_x_coords = [x for x, _ in itf_coords]
 
@@ -208,7 +208,7 @@ class FPGAPorts(InterfaceCollection):
         abs_points = [
             (
                 x * size_factor + x_offset,
-                y * size_factor + self.y + FPGAPorts.DEVICE_Y_OFFSET,
+                y * size_factor + self.y + FPGAPorts.APP_Y_OFFSET,
             )
             for x, y in points
         ]
@@ -216,13 +216,13 @@ class FPGAPorts(InterfaceCollection):
         path = ["M{},{}".format(*abs_points[0])] + [
             "L{},{}".format(*point) for point in abs_points[1:]
         ]
-        device.add(
+        app.add(
             canvas.drawing.path(path, fill="none", stroke_width=6, stroke="black")
         )
 
         x_middle = x_offset + width / 2.0
-        y_middle = self.y + FPGAPorts.DEVICE_Y_OFFSET + height / 2.0
-        device.add(
+        y_middle = self.y + FPGAPorts.APP_Y_OFFSET + height / 2.0
+        app.add(
             canvas.drawing.text(
                 name,
                 insert=(x_middle, y_middle),
@@ -233,14 +233,14 @@ class FPGAPorts(InterfaceCollection):
             )
         )
 
-        device_upper_coords = (x_middle, (self.y + FPGAPorts.DEVICE_Y_OFFSET))
-        device_lower_coords = (x_middle, (self.y + FPGAPorts.DEVICE_Y_OFFSET) + height)
+        app_upper_coords = (x_middle, (self.y + FPGAPorts.APP_Y_OFFSET))
+        app_lower_coords = (x_middle, (self.y + FPGAPorts.APP_Y_OFFSET) + height)
 
         canvas.add_connection_endpoint(
-            name, "app", device_lower_coords, device_upper_coords
+            name, "app", app_lower_coords, app_upper_coords
         )
 
-    def draw_device_connections(self, canvas, name, ports):
+    def draw_app_connections(self, canvas, name, ports):
         for port in ports:
             receives = False
             drives = False
@@ -272,14 +272,14 @@ def generate_system_svg(filename, *args, **kwargs):
 
 
 def generate_system_svg_stream(
-    stream, interfaces, connections, fpga_devices, device_shapes, dominant_type=None
+    stream, interfaces, connections, fpga_apps, app_shapes, dominant_type=None
 ):
     fpp = FrontPanelPorts(len(get_sorted_itfs(interfaces, "et")))
 
     fpga_ids = []
     fpgas = {}
-    for fpga_id, devices in fpga_devices.items():
-        ap_interfaces = sum([device["ports"] for device in devices.values()], [])
+    for fpga_id, apps in fpga_apps.items():
+        ap_interfaces = sum([app["ports"] for app in apps.values()], [])
         fpgas[fpga_id] = FPGAPorts(fpga_id, len(ap_interfaces))
 
         avg_itf = get_average_itf_idx(ap_interfaces, "ap")
@@ -332,25 +332,25 @@ def generate_system_svg_stream(
     for itf in get_sorted_itfs(interfaces, "et"):
         fpp.render_next_interface(canvas, itf, interfaces[itf])
 
-    # Render all the FPGAs, their interfaces and their devices
+    # Render all the FPGAs, their interfaces and their apps
     for fpga_id in fpga_ids:
         fpgas[fpga_id].render_box(canvas, fpgas_x, fpgas_y)
 
-        sorted_devices = []
-        for device, params in fpga_devices[fpga_id].items():
+        sorted_apps = []
+        for app, params in fpga_apps[fpga_id].items():
             avg_itf = get_average_itf_idx(params["ports"], "ap")
-            sorted_devices.append((device, avg_itf))
-        sorted_devices = [
-            device for device, _ in sorted(sorted_devices, key=lambda info: info[1])
+            sorted_apps.append((app, avg_itf))
+        sorted_apps = [
+            app for app, _ in sorted(sorted_apps, key=lambda info: info[1])
         ]
 
-        for device in sorted_devices:
-            params = fpga_devices[fpga_id][device]
+        for app in sorted_apps:
+            params = fpga_apps[fpga_id][app]
             for itf in get_sorted_itfs(params["ports"], "ap"):
                 fpgas[fpga_id].render_next_interface(canvas, itf, interfaces[itf])
 
-            fpgas[fpga_id].draw_device(
-                canvas, device, device_shapes[params["type"]], 80, params["ports"]
+            fpgas[fpga_id].draw_app(
+                canvas, app, app_shapes[params["type"]], 80, params["ports"]
             )
 
         fpgas_x += fpgas[fpga_id].width + _COLLECTION_SPACING
@@ -387,8 +387,8 @@ def generate_system_svg_stream(
         )
 
     for fpga_id in fpga_ids:
-        for device, params in fpga_devices[fpga_id].items():
-            fpgas[fpga_id].draw_device_connections(canvas, device, params["ports"])
+        for app, params in fpga_apps[fpga_id].items():
+            fpgas[fpga_id].draw_app_connections(canvas, app, params["ports"])
 
     canvas.render_legend(boxes_width, _COLLECTION_SPACING, _LEGEND_WIDTH)
     canvas.drawing.write(stream)

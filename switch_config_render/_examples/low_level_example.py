@@ -1,7 +1,7 @@
 import svgwrite
 from switch_config_render.generate_svg import FrontPanelPorts, FPGAPorts, Canvas
 
-# Vertices of the shapes used to represent FPGA application devices
+# Vertices of the shapes used to represent FPGA applications
 def get_hexagon_points():
     return [(0, 1.5), (1, 3), (3, 3), (4, 1.5), (3, 0), (1, 0), (0, 1.5)]
 
@@ -84,10 +84,10 @@ def render_low_level_example():
     fpgas["central_fpga"].render_next_interface(
         canvas, "ap8", {"alias": "exec_7", "description": "Execution port 7"}
     )
-    fpgas["central_fpga"].draw_device(
+    fpgas["central_fpga"].draw_app(
         canvas, "dev_0", get_hexagon_points(), 80, ["ap1", "ap2", "ap3"]
     )
-    fpgas["central_fpga"].draw_device(
+    fpgas["central_fpga"].draw_app(
         canvas, "mux_0", get_mux_points(), 80, ["ap4", "ap5", "ap6", "ap7"]
     )
 
