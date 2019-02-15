@@ -1,4 +1,3 @@
-
 from switch_config_render.generate_svg import generate_system_svg
 
 
@@ -185,6 +184,18 @@ def render_high_level_example():
     # the applications defined in `fpga_apps`
     app_shapes = {"custom": get_hexagon_points(), "mux": get_mux_points()}
 
+    # `onchip_connections` specifies internal connectivity within the FPGA and between FPGAs,
+    # between `ap` interfaces and FPGA applications
+    onchip_connections = [
+        {"dst": "central_fpga.mux_0", "src": "ap1", "desc": "Mux control"},
+        {"dst": "central_fpga.custom_0", "src": "ap8", "desc": "Status interface"},
+        {
+            "dst": "leaf_a_fpga.mux_1",
+            "src": "central_fpga.custom_0",
+            "desc": "Muxed output for custom_0",
+        },
+    ]
+
     # Generate the SVG. `dominant_type` can be used to define an interface type that will override all other types
     generate_system_svg(
         "high_level_example.svg",
@@ -193,4 +204,5 @@ def render_high_level_example():
         fpga_apps,
         app_shapes,
         dominant_type="tap",
+        onchip_connections=onchip_connections,
     )

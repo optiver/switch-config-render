@@ -14,8 +14,8 @@ class Canvas(object):
         self.x_connect_dst_endpoints = {}
         self.ap_src_coords = {}
         self.ap_dst_coords = {}
-        self.on_chip_src_coords = {}
-        self.on_chip_dst_coords = {}
+        self.onchip_src_coords = {}
+        self.onchip_dst_coords = {}
 
         self.ap_coords = {}
         self.connections = None
@@ -53,12 +53,14 @@ class Canvas(object):
         self.connection_colours[types] = "#{:02X}{:02X}{:02X}".format(*rgb_255)
         return self.connection_colours[types]
 
-    def render_connection(self, dst, src, bidir, onchip, types=None, nodir=False):
+    def get_connections_svg_group(self):
         # The connections need to be rendered at the top level of the SVG, so the connections group needs to be added last
         if self.connections is None:
-            self.connections = self.drawing.add(
-                self.drawing.g(id="connection", stroke="black")
-            )
+            self.connections = self.drawing.add(self.drawing.g(id="connections"))
+        return self.connections
+
+    def render_connection(self, dst, src, bidir, onchip, types=None, nodir=False):
+        conn_grp = self.get_connections_svg_group()
 
         dst_endpoints = self.ap_dst_coords if onchip else self.x_connect_dst_endpoints
         src_endpoints = self.ap_src_coords if onchip else self.x_connect_src_endpoints
@@ -72,7 +74,7 @@ class Canvas(object):
         if bidir:
             src_coords = dst_endpoints[src]
 
-        line = self.connections.add(
+        line = conn_grp.add(
             self.drawing.path(
                 ["M" + src_coords[0], "C" + src_coords[1]] + dst_coords[::-1],
                 fill="none",
@@ -85,6 +87,55 @@ class Canvas(object):
                 line.set_markers((self.start_marker, None, self.end_marker))
             else:
                 line.set_markers((None, None, self.end_marker))
+
+    def render_square_connection(self, dst, src, desc, lower_y_coord):
+        conn_grp = self.get_connections_svg_group()
+        arc_radius = 50
+
+        dst_coords = self.onchip_dst_coords[dst]
+        src_coords = self.onchip_src_coords[src]
+
+        source_is_left = True
+        left_coords = src_coords
+        right_coords = dst_coords
+
+        if dst_coords[0] < src_coords[0]:
+            source_is_left = False
+            left_coords = dst_coords
+            right_coords = src_coords
+
+        line = conn_grp.add(
+            self.drawing.path(
+                [
+                    "M{},{}".format(*left_coords),
+                    "v" + str(lower_y_coord - left_coords[1] - arc_radius),
+                    "a{r},{r} 0 0 0 {r},{r}".format(r=arc_radius),
+                    "h" + str(right_coords[0] - left_coords[0] - 2 * arc_radius),
+                    "a{r},{r} 0 0 0 {r},-{r}".format(r=arc_radius),
+                    "L{},{}".format(*right_coords),
+                ],
+                fill="none",
+                stroke="black",
+                stroke_width=4,
+            )
+        )
+
+        desc_coords = (left_coords[0] + 40, lower_y_coord - 10)
+        if source_is_left:
+            line.set_markers((None, None, self.end_marker))
+            desc_coords = (left_coords[0] + 100, lower_y_coord - 10)
+        else:
+            line.set_markers((self.start_marker, None, None))
+
+        conn_grp.add(
+            self.drawing.text(
+                str(desc),
+                insert=desc_coords,
+                font_size=20,
+                fill="black",
+                style="font-family:Courier New",
+            )
+        )
 
     def add_connection_endpoint(
         self, endpoint_name, endpoint_type, lower_mid, upper_mid
@@ -118,6 +169,8 @@ class Canvas(object):
                 bezier_coords(lower_mid, x_offset=-30),
                 bezier_coords(lower_mid, x_offset=-30, y_offset=120),
             ]
+            self.onchip_src_coords[endpoint_name] = [lower_mid[0] + 30, lower_mid[1]]
+            self.onchip_dst_coords[endpoint_name] = [lower_mid[0] - 30, lower_mid[1]]
             self.ap_coords[endpoint_name] = lower_mid
         elif endpoint_type == "app":
             self.ap_src_coords[endpoint_name] = [
@@ -128,14 +181,8 @@ class Canvas(object):
                 bezier_coords(upper_mid, x_offset=30),
                 bezier_coords(upper_mid, x_offset=30, y_offset=-120),
             ]
-            self.on_chip_src_coords[endpoint_name] = [
-                bezier_coords(lower_mid, x_offset=-30),
-                bezier_coords(lower_mid, x_offset=-30, y_offset=300),
-            ]
-            self.on_chip_dst_coords[endpoint_name] = [
-                bezier_coords(lower_mid, x_offset=30),
-                bezier_coords(lower_mid, x_offset=30, y_offset=300),
-            ]
+            self.onchip_src_coords[endpoint_name] = [lower_mid[0] - 30, lower_mid[1]]
+            self.onchip_dst_coords[endpoint_name] = [lower_mid[0] + 30, lower_mid[1]]
         else:
             assert False, 'Unkown endpoint type "{}"'.format(endpoint_type)
 

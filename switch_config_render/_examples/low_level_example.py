@@ -10,6 +10,9 @@ def get_mux_points():
     return [(1, 0), (0, 2), (4, 2), (3, 0), (1, 0)]
 
 
+shapes = {"custom": get_hexagon_points(), "mux": get_mux_points()}
+
+
 def render_low_level_example():
     COLLECTION_SPACING = 100
     LEGEND_WIDTH = 400
@@ -18,7 +21,11 @@ def render_low_level_example():
     fpp = FrontPanelPorts(3)
 
     # Create one FPGA box called "central_fpga" with 8 ap interfaces
-    fpgas = {"central_fpga": FPGAPorts("central_fpga", 8)}
+    fpgas = {
+        "central_fpga": FPGAPorts(
+            "central_fpga", ["ap" + str(i) for i in range(1, 9)], shapes
+        )
+    }
 
     # Determine the width of all the FPGA boxes
     fpgas_width = COLLECTION_SPACING
@@ -84,15 +91,13 @@ def render_low_level_example():
     fpgas["central_fpga"].render_next_interface(
         canvas, "ap8", {"alias": "exec_7", "description": "Execution port 7"}
     )
+    fpgas["central_fpga"].draw_app(canvas, "dev_0", "custom", 80, ["ap1", "ap2", "ap3"])
     fpgas["central_fpga"].draw_app(
-        canvas, "dev_0", get_hexagon_points(), 80, ["ap1", "ap2", "ap3"]
-    )
-    fpgas["central_fpga"].draw_app(
-        canvas, "mux_0", get_mux_points(), 80, ["ap4", "ap5", "ap6", "ap7"]
+        canvas, "mux_0", "mux", 80, ["ap4", "ap5", "ap6", "ap7"]
     )
 
-    fpgas["central_fpga"].draw_app_connections(canvas, "dev_0", ["ap1", "ap2", "ap3"])
-    fpgas["central_fpga"].draw_app_connections(canvas, "mux_0", ["ap4", "ap5", "ap6", "ap7"])
+    fpgas["central_fpga"].draw_apps_connections(canvas)
+    fpgas["central_fpga"].draw_apps_connections(canvas)
 
     # Render the connections
     canvas.render_connection("et1", "ap1", bidir=False, onchip=False, types=("abc",))
