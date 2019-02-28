@@ -1,4 +1,3 @@
-
 import colorsys
 
 
@@ -11,10 +10,14 @@ class Canvas(object):
     def __init__(self, drawing):
         self.drawing = drawing
 
-        self.itf_src_coords = {}
-        self.itf_dst_coords = {}
-        self.app_itf_coords = {}
+        self.x_connect_src_endpoints = {}
+        self.x_connect_dst_endpoints = {}
+        self.ap_src_coords = {}
+        self.ap_dst_coords = {}
+        self.onchip_src_coords = {}
+        self.onchip_dst_coords = {}
 
+        self.ap_coords = {}
         self.connections = None
 
         # Create the arrowhead markers
@@ -50,53 +53,138 @@ class Canvas(object):
         self.connection_colours[types] = "#{:02X}{:02X}{:02X}".format(*rgb_255)
         return self.connection_colours[types]
 
-    def render_connection(self, destination_itf, source_itf, bidir, types):
+    def get_connections_svg_group(self):
         # The connections need to be rendered at the top level of the SVG, so the connections group needs to be added last
         if self.connections is None:
-            self.connections = self.drawing.add(
-                self.drawing.g(id="connection", stroke="black", stroke_width=6)
-            )
+            self.connections = self.drawing.add(self.drawing.g(id="connections"))
+        return self.connections
 
-        dst = self.itf_dst_coords[destination_itf]
-        src = self.itf_src_coords[source_itf]
+    def render_connection(self, dst, src, bidir, onchip, types=None, nodir=False):
+        conn_grp = self.get_connections_svg_group()
+
+        dst_endpoints = self.ap_dst_coords if onchip else self.x_connect_dst_endpoints
+        src_endpoints = self.ap_src_coords if onchip else self.x_connect_src_endpoints
+
+        dst_coords = dst_endpoints[dst]
+        src_coords = src_endpoints[src]
+
+        # Src coords are slightly to the left, while dst coords are slightly to the right of the connection point.
+        # If the connection is bidirectional we want the src coords to be slightly to the right so that the direction
+        # of other connections that are sourced from this endpoint are easy to tell apart
         if bidir:
-            src = self.itf_dst_coords[source_itf]
+            src_coords = dst_endpoints[src]
 
-        line = self.connections.add(
+        line = conn_grp.add(
             self.drawing.path(
-                ["M" + src[0], "C" + src[1]] + dst[::-1],
+                ["M" + src_coords[0], "C" + src_coords[1]] + dst_coords[::-1],
                 fill="none",
-                stroke=self.get_colour_for_types(types),
+                stroke=self.get_colour_for_types(types) if types else "black",
+                stroke_width=4 if onchip else 6,
             )
         )
-        if bidir:
-            line.set_markers((self.start_marker, None, self.end_marker))
-        else:
-            line.set_markers((None, None, self.end_marker))
+        if not nodir:
+            if bidir:
+                line.set_markers((self.start_marker, None, self.end_marker))
+            else:
+                line.set_markers((None, None, self.end_marker))
 
-    def add_interface_connection_points(self, itf, front_panel, lower_mid, upper_mid):
-        def curved_path(coords, x_offset=0, y_offset=0):
+    def render_square_connection(self, dst, src, desc, lower_y_coord):
+        conn_grp = self.get_connections_svg_group()
+        arc_radius = 50
+
+        dst_coords = self.onchip_dst_coords[dst]
+        src_coords = self.onchip_src_coords[src]
+
+        source_is_left = True
+        left_coords = src_coords
+        right_coords = dst_coords
+
+        if dst_coords[0] < src_coords[0]:
+            source_is_left = False
+            left_coords = dst_coords
+            right_coords = src_coords
+
+        line = conn_grp.add(
+            self.drawing.path(
+                [
+                    "M{},{}".format(*left_coords),
+                    "v" + str(lower_y_coord - left_coords[1] - arc_radius),
+                    "a{r},{r} 0 0 0 {r},{r}".format(r=arc_radius),
+                    "h" + str(right_coords[0] - left_coords[0] - 2 * arc_radius),
+                    "a{r},{r} 0 0 0 {r},-{r}".format(r=arc_radius),
+                    "L{},{}".format(*right_coords),
+                ],
+                fill="none",
+                stroke="black",
+                stroke_width=4,
+            )
+        )
+
+        desc_coords = (left_coords[0] + 40, lower_y_coord - 10)
+        if source_is_left:
+            line.set_markers((None, None, self.end_marker))
+            desc_coords = (left_coords[0] + 100, lower_y_coord - 10)
+        else:
+            line.set_markers((self.start_marker, None, None))
+
+        conn_grp.add(
+            self.drawing.text(
+                str(desc),
+                insert=desc_coords,
+                font_size=20,
+                fill="black",
+                style="font-family:monospace",
+            )
+        )
+
+    def add_connection_endpoint(
+        self, endpoint_name, endpoint_type, lower_mid, upper_mid
+    ):
+        def bezier_coords(coords, x_offset=0, y_offset=0):
             return "{},{}".format(str(coords[0] + x_offset), str(coords[1] + y_offset))
 
-        if front_panel:
-            self.itf_src_coords[itf] = [
-                curved_path(lower_mid, x_offset=-30),
-                curved_path(lower_mid, x_offset=-30, y_offset=300),
+        if endpoint_type == "et_itf":
+            self.x_connect_src_endpoints[endpoint_name] = [
+                bezier_coords(lower_mid, x_offset=-30),
+                bezier_coords(lower_mid, x_offset=-30, y_offset=300),
             ]
-            self.itf_dst_coords[itf] = [
-                curved_path(lower_mid, x_offset=30),
-                curved_path(lower_mid, x_offset=30, y_offset=300),
+            self.x_connect_dst_endpoints[endpoint_name] = [
+                bezier_coords(lower_mid, x_offset=30),
+                bezier_coords(lower_mid, x_offset=30, y_offset=300),
             ]
+        elif endpoint_type == "ap_itf":
+            self.x_connect_src_endpoints[endpoint_name] = [
+                bezier_coords(upper_mid, x_offset=-30),
+                bezier_coords(upper_mid, x_offset=-30, y_offset=-300),
+            ]
+            self.x_connect_dst_endpoints[endpoint_name] = [
+                bezier_coords(upper_mid, x_offset=30),
+                bezier_coords(upper_mid, x_offset=30, y_offset=-300),
+            ]
+            self.ap_src_coords[endpoint_name] = [
+                bezier_coords(lower_mid, x_offset=30),
+                bezier_coords(lower_mid, x_offset=30, y_offset=120),
+            ]
+            self.ap_dst_coords[endpoint_name] = [
+                bezier_coords(lower_mid, x_offset=-30),
+                bezier_coords(lower_mid, x_offset=-30, y_offset=120),
+            ]
+            self.onchip_src_coords[endpoint_name] = [lower_mid[0] + 30, lower_mid[1]]
+            self.onchip_dst_coords[endpoint_name] = [lower_mid[0] - 30, lower_mid[1]]
+            self.ap_coords[endpoint_name] = lower_mid
+        elif endpoint_type == "app":
+            self.ap_src_coords[endpoint_name] = [
+                bezier_coords(upper_mid, x_offset=-30),
+                bezier_coords(upper_mid, x_offset=-30, y_offset=-120),
+            ]
+            self.ap_dst_coords[endpoint_name] = [
+                bezier_coords(upper_mid, x_offset=30),
+                bezier_coords(upper_mid, x_offset=30, y_offset=-120),
+            ]
+            self.onchip_src_coords[endpoint_name] = [lower_mid[0] - 30, lower_mid[1]]
+            self.onchip_dst_coords[endpoint_name] = [lower_mid[0] + 30, lower_mid[1]]
         else:
-            self.itf_src_coords[itf] = [
-                curved_path(upper_mid, x_offset=-30),
-                curved_path(upper_mid, x_offset=-30, y_offset=-300),
-            ]
-            self.itf_dst_coords[itf] = [
-                curved_path(upper_mid, x_offset=30),
-                curved_path(upper_mid, x_offset=30, y_offset=-300),
-            ]
-            self.app_itf_coords[itf] = lower_mid
+            assert False, 'Unkown endpoint type "{}"'.format(endpoint_type)
 
     def render_legend(self, x_offset, y_offset, legend_width):
         inter_line_gap = 40

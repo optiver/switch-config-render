@@ -1,4 +1,3 @@
-
 import copy
 import svgwrite
 
@@ -16,6 +15,7 @@ _INTERFACE_V_CLEARANCE = 50
 _INTERFACE_SPACE = _INTERFACE_WIDTH + 2 * _INTERFACE_H_CLEARANCE
 _COLLECTION_SPACING = 100
 _LEGEND_WIDTH = 400
+_ONCHIP_CONNECTION_CLEARANCE = 50
 
 
 class InterfaceCollection(object):
@@ -28,6 +28,7 @@ class InterfaceCollection(object):
         self.x = None
         self.y = None
         self.itf_idx = 0
+        self.itf_params = {}
 
     def render_box(self, canvas, x, y):
         box = canvas.drawing.add(canvas.drawing.g(id="box_" + self.id, fill="white"))
@@ -48,7 +49,7 @@ class InterfaceCollection(object):
                     alignment_baseline="middle",
                     text_anchor="middle",
                     fill="black",
-                    style="font-family:Courier New",
+                    style="font-family:monospace",
                     font_size=30,
                 )
             )
@@ -56,11 +57,9 @@ class InterfaceCollection(object):
             box.add(
                 canvas.drawing.text(
                     self.name,
-                    insert=(x + self.width / 2.0, y + self.height - 20),
-                    alignment_baseline="middle",
-                    text_anchor="middle",
+                    insert=(x + 20, y + self.height - 20),
                     fill="black",
-                    style="font-family:Courier New",
+                    style="font-family:monospace",
                     font_size=30,
                 )
             )
@@ -91,9 +90,10 @@ class InterfaceCollection(object):
         lower_mid = (middle_x, y + _INTERFACE_V_CLEARANCE + _INTERFACE_HEIGHT)
         upper_mid = (middle_x, y + _INTERFACE_V_CLEARANCE)
 
-        canvas.add_interface_connection_points(
-            itf, self.front_panel, lower_mid, upper_mid
+        canvas.add_connection_endpoint(
+            itf, "et_itf" if self.front_panel else "ap_itf", lower_mid, upper_mid
         )
+        self.itf_params[itf] = params
 
         # Make the front panel interface ports look like RJ-45 connectors
         if self.front_panel:
@@ -141,7 +141,7 @@ class InterfaceCollection(object):
                     insert=(middle_x, y + 150),
                     alignment_baseline="middle",
                     text_anchor="middle",
-                    style="font-family:Courier New",
+                    style="font-family:monospace",
                     font_size=15,
                 )
             )
@@ -155,7 +155,7 @@ class InterfaceCollection(object):
                         insert=(middle_x, y + 40),
                         alignment_baseline="middle",
                         text_anchor="middle",
-                        style="font-family:Courier New",
+                        style="font-family:monospace",
                         font_size=15,
                     )
                 )
@@ -166,7 +166,7 @@ class InterfaceCollection(object):
                         insert=(middle_x, y + 180),
                         alignment_baseline="middle",
                         text_anchor="middle",
-                        style="font-family:Courier New",
+                        style="font-family:monospace",
                         font_size=15,
                     )
                 )
@@ -182,25 +182,73 @@ class FrontPanelPorts(InterfaceCollection):
 
 
 class FPGAPorts(InterfaceCollection):
-    DEVICE_Y_OFFSET = 400
+    APP_Y_OFFSET = (
+        400
+    )  # Indicates how far down apps are drawn from the top border of the FPGA box
 
-    def __init__(self, id, interface_count):
-        super(FPGAPorts, self).__init__(id, interface_count, False, 750)
+    def __init__(self, id, ap_interfaces, app_shapes, onchip_connections=None):
+        self.fpga_id = id
+        self.app_shapes = app_shapes
+        self.ap_interfaces = ap_interfaces
+        self.apps_ports = {}
+        self.onchip_connections = []
+        self.onchip_endpoints = set()
 
-    def draw_device(self, canvas, name, points, size_factor, ports):
-        device = canvas.drawing.add(
+        # The height of the FPGA box is determined by the number of on-chip connections belonging only to this FPGA
+        height = 750
+        if onchip_connections:
+            for conn in onchip_connections:
+                dst = conn["dst"]
+                src = conn["src"]
+                if (dst in ap_interfaces or dst.startswith(id)) and (
+                    src in ap_interfaces or src.startswith(id)
+                ):
+                    self.onchip_endpoints.add(dst)
+                    self.onchip_endpoints.add(src)
+                    self.onchip_connections.append(conn)
+                    height += _ONCHIP_CONNECTION_CLEARANCE
+
+        super(FPGAPorts, self).__init__(id, len(ap_interfaces), False, height)
+
+    def render_fpga_internals(self, canvas, fpga_apps, x, y, interfaces):
+        self.render_box(canvas, x, y)
+
+        sorted_apps = []
+        for app, params in fpga_apps.items():
+            avg_itf = get_average_itf_idx(params["ports"], "ap")
+            sorted_apps.append((app, avg_itf))
+        sorted_apps = [app for app, _ in sorted(sorted_apps, key=lambda info: info[1])]
+
+        for app in sorted_apps:
+            params = fpga_apps[app]
+
+            app_ports = set(params["ports"])
+            self.apps_ports[app] = set(app_ports)
+
+            onchip_app_ports = app_ports.intersection(self.onchip_endpoints)
+            app_ports -= onchip_app_ports
+
+            for itf in get_sorted_itfs(onchip_app_ports, "ap"):
+                self.render_next_interface(canvas, itf, interfaces[itf])
+
+            for itf in get_sorted_itfs(app_ports, "ap"):
+                self.render_next_interface(canvas, itf, interfaces[itf])
+
+            self.draw_app(canvas, app, params["type"], 80, app_ports)
+
+    def draw_app(self, canvas, name, app_type, size_factor, ports):
+        app = canvas.drawing.add(
             canvas.drawing.g(
-                id="device_" + self.id + "_" + name, fill="white", font_size=50
+                id="app_" + self.id + "_" + name, fill="white", font_size=50
             )
         )
 
+        points = self.app_shapes[app_type]
         width = max([x for x, _ in points]) * size_factor
         height = max([y for _, y in points]) * size_factor
 
-        # Determine the placement of the device by selecting the mid-point of all the connected ports
-        itf_coords = [
-            canvas.app_itf_coords[itf] for itf in ports if itf in canvas.app_itf_coords
-        ]
+        # Determine the placement of the app by selecting the mid-point of all the connected ports
+        itf_coords = [canvas.ap_coords[itf] for itf in ports if itf in canvas.ap_coords]
         itf_x_coords = [x for x, _ in itf_coords]
 
         x_offset = min(itf_x_coords) + (max(itf_x_coords) - min(itf_x_coords)) / 2.0
@@ -209,7 +257,7 @@ class FPGAPorts(InterfaceCollection):
         abs_points = [
             (
                 x * size_factor + x_offset,
-                y * size_factor + self.y + FPGAPorts.DEVICE_Y_OFFSET,
+                y * size_factor + self.y + FPGAPorts.APP_Y_OFFSET,
             )
             for x, y in points
         ]
@@ -217,13 +265,11 @@ class FPGAPorts(InterfaceCollection):
         path = ["M{},{}".format(*abs_points[0])] + [
             "L{},{}".format(*point) for point in abs_points[1:]
         ]
-        device.add(
-            canvas.drawing.path(path, fill="none", stroke_width=6, stroke="black")
-        )
+        app.add(canvas.drawing.path(path, fill="none", stroke_width=6, stroke="black"))
 
         x_middle = x_offset + width / 2.0
-        y_middle = self.y + FPGAPorts.DEVICE_Y_OFFSET + height / 2.0
-        device.add(
+        y_middle = self.y + FPGAPorts.APP_Y_OFFSET + height / 2.0
+        app.add(
             canvas.drawing.text(
                 name,
                 insert=(x_middle, y_middle),
@@ -234,41 +280,80 @@ class FPGAPorts(InterfaceCollection):
             )
         )
 
-        device_conn_coords = (x_middle, (self.y + FPGAPorts.DEVICE_Y_OFFSET))
-        for port in ports:
-            device.add(
-                canvas.drawing.line(
-                    device_conn_coords,
-                    canvas.app_itf_coords[port],
-                    stroke_width=4,
-                    stroke="black",
+        app_upper_coords = (x_middle, (self.y + FPGAPorts.APP_Y_OFFSET))
+        app_lower_coords = (x_middle, (self.y + FPGAPorts.APP_Y_OFFSET) + height)
+
+        canvas.add_connection_endpoint(
+            self.fpga_id + "." + name, "app", app_lower_coords, app_upper_coords
+        )
+
+    def draw_apps_connections(self, canvas):
+        for name, ports in self.apps_ports.items():
+            app_name = self.fpga_id + "." + name
+            for port in ports:
+                receives = False
+                drives = False
+                dst = port
+                src = app_name
+
+                if (
+                    "receives" in self.itf_params[port]
+                    and self.itf_params[port]["receives"]
+                ):
+                    receives = True
+
+                if (
+                    "drives" in self.itf_params[port]
+                    and self.itf_params[port]["drives"]
+                ):
+                    drives = True
+                    if receives:
+                        bidir = True
+                    else:
+                        dst = app_name
+                        src = port
+
+                bidir = receives and drives
+                nodir = not receives and not drives
+                canvas.render_connection(
+                    dst, src, bidir=bidir, onchip=True, nodir=nodir
                 )
+
+        connection_lower_y = self.y + 700
+        for conn in self.onchip_connections:
+            canvas.render_square_connection(
+                conn["dst"], conn["src"], conn["desc"], connection_lower_y
             )
+            connection_lower_y += _ONCHIP_CONNECTION_CLEARANCE
 
 
-def generate_system_svg(
-    filename,
-    *args,
-    **kwargs
-):
-    with open(filename, 'w') as fileobj:
+def generate_system_svg(filename, *args, **kwargs):
+    with open(filename, "w") as fileobj:
         generate_system_svg_stream(fileobj, *args, **kwargs)
+
 
 def generate_system_svg_stream(
     stream,
     interfaces,
     connections,
-    fpga_devices,
-    device_shapes,
+    fpga_apps,
+    app_shapes,
     dominant_type=None,
+    onchip_connections=None,
 ):
     fpp = FrontPanelPorts(len(get_sorted_itfs(interfaces, "et")))
 
     fpga_ids = []
     fpgas = {}
-    for fpga_id, devices in fpga_devices.items():
-        ap_interfaces = sum([device["ports"] for device in devices.values()], [])
-        fpgas[fpga_id] = FPGAPorts(fpga_id, len(ap_interfaces))
+    for fpga_id, apps in fpga_apps.items():
+        ap_interfaces = sum([app["ports"] for app in apps.values()], [])
+        fpgas[fpga_id] = FPGAPorts(
+            fpga_id, ap_interfaces, app_shapes, onchip_connections
+        )
+
+        # Remove the onchip connections within this FPGA
+        for conn in fpgas[fpga_id].onchip_connections:
+            onchip_connections.remove(conn)
 
         avg_itf = get_average_itf_idx(ap_interfaces, "ap")
         fpga_ids.append((fpga_id, avg_itf))
@@ -296,7 +381,18 @@ def generate_system_svg_stream(
 
     if fpgas_height > 0:
         fpgas_y = drawing_height + _COLLECTION_SPACING + 400 + len(connections) * 20
-        drawing_height = fpgas_y + fpgas_height + _COLLECTION_SPACING / 2
+        drawing_height = fpgas_y + fpgas_height
+
+        if onchip_connections:
+            inter_chip_connection_lower_y = (
+                drawing_height + _ONCHIP_CONNECTION_CLEARANCE
+            )
+            drawing_height = (
+                inter_chip_connection_lower_y
+                + len(onchip_connections) * _ONCHIP_CONNECTION_CLEARANCE
+            )
+        else:
+            drawing_height += _COLLECTION_SPACING / 2
 
     drawing = svgwrite.Drawing(
         debug=True,
@@ -320,27 +416,11 @@ def generate_system_svg_stream(
     for itf in get_sorted_itfs(interfaces, "et"):
         fpp.render_next_interface(canvas, itf, interfaces[itf])
 
-    # Render all the FPGAs, their interfaces and their devices
+    # Render all the FPGAs, their interfaces and their apps
     for fpga_id in fpga_ids:
-        fpgas[fpga_id].render_box(canvas, fpgas_x, fpgas_y)
-
-        sorted_devices = []
-        for device, params in fpga_devices[fpga_id].items():
-            avg_itf = get_average_itf_idx(params["ports"], "ap")
-            sorted_devices.append((device, avg_itf))
-        sorted_devices = [
-            device for device, _ in sorted(sorted_devices, key=lambda info: info[1])
-        ]
-
-        for device in sorted_devices:
-            params = fpga_devices[fpga_id][device]
-            for itf in get_sorted_itfs(params["ports"], "ap"):
-                fpgas[fpga_id].render_next_interface(canvas, itf, interfaces[itf])
-
-            fpgas[fpga_id].draw_device(
-                canvas, device, device_shapes[params["type"]], 80, params["ports"]
-            )
-
+        fpgas[fpga_id].render_fpga_internals(
+            canvas, fpga_apps[fpga_id], fpgas_x, fpgas_y, interfaces
+        )
         fpgas_x += fpgas[fpga_id].width + _COLLECTION_SPACING
 
     # Render the connections
@@ -357,6 +437,7 @@ def generate_system_svg_stream(
             endp1,
             endp2,
             bidir=True,
+            onchip=False,
             types=get_connection_types(
                 interfaces, endp1, endp2, bidir=True, dominant_type=dominant_type
             ),
@@ -367,10 +448,21 @@ def generate_system_svg_stream(
             dst,
             src,
             bidir=False,
+            onchip=False,
             types=get_connection_types(
                 interfaces, dst, src, bidir=False, dominant_type=dominant_type
             ),
         )
+
+    for fpga_id in fpga_ids:
+        fpgas[fpga_id].draw_apps_connections(canvas)
+
+    if onchip_connections:
+        for conn in onchip_connections:
+            canvas.render_square_connection(
+                conn["dst"], conn["src"], conn["desc"], inter_chip_connection_lower_y
+            )
+            inter_chip_connection_lower_y += _ONCHIP_CONNECTION_CLEARANCE
 
     canvas.render_legend(boxes_width, _COLLECTION_SPACING, _LEGEND_WIDTH)
     canvas.drawing.write(stream)

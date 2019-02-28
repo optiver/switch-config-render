@@ -1,8 +1,7 @@
-
 from switch_config_render.generate_svg import generate_system_svg
 
 
-# Vertices of the shapes used to represent FPGA application devices
+# Vertices of the shapes used to represent FPGA applications
 def get_hexagon_points():
     return [(0, 1.5), (1, 3), (3, 3), (4, 1.5), (3, 0), (1, 0), (0, 1.5)]
 
@@ -64,7 +63,7 @@ def render_high_level_example():
             "drives": "type_b",
         },
         "et9": {"alias": "front_panel_9", "description": "Tap Out", "drives": "tap"},
-        # Every application port listed here must be associated with a device port in 'fpga_devices' below
+        # Every application port listed here must be associated with a application port in 'fpga_apps' below
         "ap1": {
             "alias": "custom_in",
             "description": "Custom In",
@@ -158,20 +157,20 @@ def render_high_level_example():
         "et9": "ap61",
     }
 
-    # `fpga_devices` is a dict that specifies the application devices
-    # that are configured on the given FPGA and is composed of nested
+    # `fpga_apps` is a dict that specifies the applications that
+    # are configured on the given FPGA and is composed of nested
     # dictionaries.
     #
     # The keys at the first level specify the FPGA aliases, e.g.,
     # `central_fpga`
     #
-    # The keys at the second level specify the aliases of the devices
+    # The keys at the second level specify the aliases of the apps
     # configured on the FPGA, e.g., `custom_0` or `mux_0`. The value
     # pointed to is a dict that must contain the following information:
-    # * type: gives the device type and is used to lookup which shape
-    #       needs to be drawn based on `device_shapes`
-    # * ports: a list of ports associated with this device
-    fpga_devices = {
+    # * type: gives the app type and is used to lookup which shape
+    #       needs to be drawn based on `app_shapes`
+    # * ports: a list of ports associated with this app
+    fpga_apps = {
         "central_fpga": {
             "custom_0": {"type": "custom", "ports": ["ap1", "ap2", "ap3"]},
             "mux_0": {"type": "mux", "ports": ["ap4", "ap5", "ap6", "ap7", "ap8"]},
@@ -181,16 +180,29 @@ def render_high_level_example():
         },
     }
 
-    # `device_shapes` defines the vertices of the shapes to be used for
-    # the application device defined in `fpga_devices`
-    device_shapes = {"custom": get_hexagon_points(), "mux": get_mux_points()}
+    # `app_shapes` defines the vertices of the shapes to be used for
+    # the applications defined in `fpga_apps`
+    app_shapes = {"custom": get_hexagon_points(), "mux": get_mux_points()}
+
+    # `onchip_connections` specifies internal connectivity within the FPGA and between FPGAs,
+    # between `ap` interfaces and FPGA applications
+    onchip_connections = [
+        {"dst": "central_fpga.mux_0", "src": "ap1", "desc": "Mux control"},
+        {"dst": "central_fpga.custom_0", "src": "ap8", "desc": "Status interface"},
+        {
+            "dst": "leaf_a_fpga.mux_1",
+            "src": "central_fpga.custom_0",
+            "desc": "Muxed output for custom_0",
+        },
+    ]
 
     # Generate the SVG. `dominant_type` can be used to define an interface type that will override all other types
     generate_system_svg(
         "high_level_example.svg",
         interfaces,
         connections,
-        fpga_devices,
-        device_shapes,
+        fpga_apps,
+        app_shapes,
         dominant_type="tap",
+        onchip_connections=onchip_connections,
     )
