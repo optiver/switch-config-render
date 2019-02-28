@@ -49,7 +49,7 @@ class InterfaceCollection(object):
                     alignment_baseline="middle",
                     text_anchor="middle",
                     fill="black",
-                    style="font-family:Courier New",
+                    style="font-family:monospace",
                     font_size=30,
                 )
             )
@@ -59,7 +59,7 @@ class InterfaceCollection(object):
                     self.name,
                     insert=(x + 20, y + self.height - 20),
                     fill="black",
-                    style="font-family:Courier New",
+                    style="font-family:monospace",
                     font_size=30,
                 )
             )
@@ -141,7 +141,7 @@ class InterfaceCollection(object):
                     insert=(middle_x, y + 150),
                     alignment_baseline="middle",
                     text_anchor="middle",
-                    style="font-family:Courier New",
+                    style="font-family:monospace",
                     font_size=15,
                 )
             )
@@ -155,7 +155,7 @@ class InterfaceCollection(object):
                         insert=(middle_x, y + 40),
                         alignment_baseline="middle",
                         text_anchor="middle",
-                        style="font-family:Courier New",
+                        style="font-family:monospace",
                         font_size=15,
                     )
                 )
@@ -166,7 +166,7 @@ class InterfaceCollection(object):
                         insert=(middle_x, y + 180),
                         alignment_baseline="middle",
                         text_anchor="middle",
-                        style="font-family:Courier New",
+                        style="font-family:monospace",
                         font_size=15,
                     )
                 )

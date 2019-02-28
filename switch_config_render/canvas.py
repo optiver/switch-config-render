@@ -133,7 +133,7 @@ class Canvas(object):
                 insert=desc_coords,
                 font_size=20,
                 fill="black",
-                style="font-family:Courier New",
+                style="font-family:monospace",
             )
         )
 
