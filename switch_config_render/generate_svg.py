@@ -11,6 +11,7 @@ from switch_config_render.canvas import Canvas
 _INTERFACE_WIDTH = 200
 _INTERFACE_HEIGHT = 150
 _INTERFACE_H_CLEARANCE = 30
+_INTERFACE_H_END_CLEARANCE = 80
 _INTERFACE_V_CLEARANCE = 50
 _INTERFACE_SPACE = _INTERFACE_WIDTH + 2 * _INTERFACE_H_CLEARANCE
 _COLLECTION_SPACING = 100
@@ -23,7 +24,7 @@ class InterfaceCollection(object):
         self.id = id
         self.name = id.replace("_", " ").title()
         self.front_panel = front_panel
-        self.width = interface_count * _INTERFACE_SPACE
+        self.width = interface_count * _INTERFACE_SPACE + 2 * _INTERFACE_H_END_CLEARANCE
         self.height = height
         self.x = None
         self.y = None
@@ -68,7 +69,7 @@ class InterfaceCollection(object):
         self.y = y
 
     def render_next_interface(self, canvas, itf, params):
-        x = self.x + (self.itf_idx * _INTERFACE_SPACE)
+        x = self.x + (self.itf_idx * _INTERFACE_SPACE) + _INTERFACE_H_END_CLEARANCE
         y = self.y
         if self.front_panel:
             y += 50
@@ -186,13 +187,21 @@ class FPGAPorts(InterfaceCollection):
         400
     )  # Indicates how far down apps are drawn from the top border of the FPGA box
 
-    def __init__(self, id, ap_interfaces, app_shapes, onchip_connections=None):
+    def __init__(
+        self,
+        id,
+        ap_interfaces,
+        app_shapes,
+        onchip_connections=None,
+        onchip_conn_clearance=_ONCHIP_CONNECTION_CLEARANCE,
+    ):
         self.fpga_id = id
         self.app_shapes = app_shapes
         self.ap_interfaces = ap_interfaces
         self.apps_ports = {}
         self.onchip_connections = []
         self.onchip_endpoints = set()
+        self.onchip_conn_clearance = onchip_conn_clearance
 
         # The height of the FPGA box is determined by the number of on-chip connections belonging only to this FPGA
         height = 750
@@ -206,16 +215,18 @@ class FPGAPorts(InterfaceCollection):
                     self.onchip_endpoints.add(dst)
                     self.onchip_endpoints.add(src)
                     self.onchip_connections.append(conn)
-                    height += _ONCHIP_CONNECTION_CLEARANCE
+                    height += self.onchip_conn_clearance
 
         super(FPGAPorts, self).__init__(id, len(ap_interfaces), False, height)
 
-    def render_fpga_internals(self, canvas, fpga_apps, x, y, interfaces):
+    def render_fpga_internals(
+        self, canvas, fpga_apps, x, y, interfaces, itf_prefix="ap"
+    ):
         self.render_box(canvas, x, y)
 
         sorted_apps = []
         for app, params in fpga_apps.items():
-            avg_itf = get_average_itf_idx(params["ports"], "ap")
+            avg_itf = get_average_itf_idx(params["ports"], itf_prefix)
             sorted_apps.append((app, avg_itf))
         sorted_apps = [app for app, _ in sorted(sorted_apps, key=lambda info: info[1])]
 
@@ -228,10 +239,10 @@ class FPGAPorts(InterfaceCollection):
             onchip_app_ports = app_ports.intersection(self.onchip_endpoints)
             app_ports -= onchip_app_ports
 
-            for itf in get_sorted_itfs(onchip_app_ports, "ap"):
+            for itf in get_sorted_itfs(onchip_app_ports, itf_prefix):
                 self.render_next_interface(canvas, itf, interfaces[itf])
 
-            for itf in get_sorted_itfs(app_ports, "ap"):
+            for itf in get_sorted_itfs(app_ports, itf_prefix):
                 self.render_next_interface(canvas, itf, interfaces[itf])
 
             self.draw_app(canvas, app, params["type"], 80, app_ports)
@@ -283,13 +294,14 @@ class FPGAPorts(InterfaceCollection):
         app_upper_coords = (x_middle, (self.y + FPGAPorts.APP_Y_OFFSET))
         app_lower_coords = (x_middle, (self.y + FPGAPorts.APP_Y_OFFSET) + height)
 
+        endpoint_name = "{}.{}".format(self.fpga_id, name) if self.fpga_id else name
         canvas.add_connection_endpoint(
-            self.fpga_id + "." + name, "app", app_lower_coords, app_upper_coords
+            endpoint_name, "app", app_lower_coords, app_upper_coords
         )
 
     def draw_apps_connections(self, canvas):
         for name, ports in self.apps_ports.items():
-            app_name = self.fpga_id + "." + name
+            app_name = "{}.{}".format(self.fpga_id, name) if self.fpga_id else name
             for port in ports:
                 receives = False
                 drives = False
@@ -324,7 +336,7 @@ class FPGAPorts(InterfaceCollection):
             canvas.render_square_connection(
                 conn["dst"], conn["src"], conn["desc"], connection_lower_y
             )
-            connection_lower_y += _ONCHIP_CONNECTION_CLEARANCE
+            connection_lower_y += self.onchip_conn_clearance
 
 
 def generate_system_svg(filename, *args, **kwargs):
