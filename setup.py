@@ -7,7 +7,7 @@ with open("README.md") as fh:
 
 setup(
     name="switch-config-render",
-    version="0.1.0",
+    version="0.1.1",
     description="A Python library for SVG network switch configuration rendering.",
     long_description=long_description,
     author="Josef Schneider",
