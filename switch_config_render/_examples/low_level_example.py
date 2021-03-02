@@ -23,7 +23,7 @@ def render_low_level_example():
     # Create one FPGA box called "central_fpga" with 8 ap interfaces
     fpgas = {
         "central_fpga": FPGAPorts(
-            "central_fpga", ["ap" + str(i) for i in range(1, 9)], shapes
+            "central_fpga", ["ap" + str(i) for i in range(1, 9)], {}, shapes, []
         )
     }
 
