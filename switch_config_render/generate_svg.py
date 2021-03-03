@@ -240,8 +240,11 @@ class FPGAPorts(InterfaceCollection):
 
         sorted_apps = []
         for app, params in self.fpga_apps.items():
-            avg_itf = get_average_itf_idx(params["ports"], itf_prefix)
-            sorted_apps.append((app, avg_itf))
+            if len(params["ports"]) == 0:
+                sorted_apps.append((app, 0))
+            else:
+                avg_itf = get_average_itf_idx(params["ports"], itf_prefix)
+                sorted_apps.append((app, avg_itf))
         sorted_apps = [app for app, _ in sorted(sorted_apps, key=lambda info: info[1])]
 
         for app in sorted_apps:
